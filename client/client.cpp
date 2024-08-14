@@ -3,7 +3,6 @@
 #include <QPushButton>
 #include <QLineEdit>
 #include <QTableWidget>
-#include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QMessageBox>
@@ -13,9 +12,6 @@
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QJsonArray>
-#include <QJsonValue>
-#include <QTableWidgetItem>
-#include <QAbstractItemView>
 #include <QLabel>
 #include <QSettings>
 #include <QFile>
@@ -24,23 +20,20 @@
 #include <QCryptographicHash>
 #include <QFileDialog>
 #include <QBuffer>
-#include <QDebug>
 #include <pqxx/binarystring.hxx>
 
 class ClientApp : public QWidget {
-    Q_OBJECT
+Q_OBJECT
 
 public:
     ClientApp(QWidget* parent = nullptr) : QWidget(parent), manager(new QNetworkAccessManager(this)) {
-        // Load settings from config file
-        QSettings settings("/home/vova/CLionProjects/untitled/client/client.ini", QSettings::IniFormat);
-        serverUrl = settings.value("Server/Url", "http://localhost:8080").toString();
-        logFilePath = settings.value("Log/FilePath", "/home/vova/CLionProjects/untitled/client/client.log").toString();
+        QSettings settings("../../client/client.ini", QSettings::IniFormat);
+        serverUrl = settings.value("Server/Url").toString();
+        logFilePath = settings.value("Log/FilePath").toString();
         username = settings.value("Auth/Username").toString();
         QString password = settings.value("Auth/Password").toString();
         password_hash = QString(QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha256).toHex());
 
-        // Set up the UI
         QVBoxLayout* layout = new QVBoxLayout(this);
 
         QHBoxLayout* formLayout = new QHBoxLayout();
@@ -51,7 +44,7 @@ public:
 
         formLayout->addWidget(new QLabel("ФИО:"));
         formLayout->addWidget(nameEdit);
-        formLayout->addWidget(new QLabel("Груп:"));
+        formLayout->addWidget(new QLabel("Группа:"));
         formLayout->addWidget(groupEdit);
         formLayout->addWidget(new QLabel("Курс:"));
         formLayout->addWidget(courseEdit);
@@ -71,19 +64,19 @@ public:
         connect(deleteButton, &QPushButton::clicked, this, &ClientApp::deleteRecord);
         connect(manager, &QNetworkAccessManager::finished, this, &ClientApp::onReplyFinished);
 
-        log("Client started.");
+        log("Клиент запущен.");
         loadTable();
     }
 
 private slots:
     void addRecord() {
-     QString fileName = QFileDialog::getOpenFileName(this, "Выберите изображение");
+        QString fileName = QFileDialog::getOpenFileName(this, "Выберите изображение");
         if (fileName.isEmpty()) return;
 
-        // Load image
+        qDebug() << fileName;
         QImage image(fileName);
         if (image.isNull()) {
-            qWarning("Failed to load image");
+            qWarning("Ошибка при загрузке фото.");
             return;
         }
         QByteArray byteArray;
@@ -98,7 +91,7 @@ private slots:
         json["username"] = username;
         json["password_hash"] = password_hash;
         json["ФИО"] = nameEdit->text();
-        json["Груп"] = groupEdit->text();
+        json["Группа"] = groupEdit->text();
         json["Курс"] = courseEdit->text().toInt();
         json["Год"] = yearEdit->text().toInt();
         json["Фото"] = base64Image;
@@ -108,7 +101,7 @@ private slots:
         QNetworkReply* reply = manager->post(request, QJsonDocument(json).toJson());
         connect(reply, &QNetworkReply::finished, this, &ClientApp::onAddReplyFinished);
 
-        log("Added record: " + QString(QJsonDocument(json).toJson().constData()));
+        log("Добавлена запись.");
     }
 
     void deleteRecord() {
@@ -128,7 +121,7 @@ private slots:
         QNetworkReply* reply = manager->post(request, QJsonDocument(json).toJson());
         connect(reply, &QNetworkReply::finished, this, &ClientApp::onDeleteReplyFinished);
 
-        log("Deleted record with ID: " + tableView->item(row, 0)->text());
+        log("Удалена запись с ID: " + tableView->item(row, 0)->text());
     }
 
     void loadTable() {
@@ -136,7 +129,7 @@ private slots:
         QNetworkReply* reply = manager->get(request);
         connect(reply, &QNetworkReply::finished, this, &ClientApp::onReplyFinished);
 
-        log("Loaded table data.");
+        log("Загружены данные из таблицы.");
     }
 
     void onReplyFinished() {
@@ -149,13 +142,13 @@ private slots:
 
         tableView->setRowCount(array.size());
         tableView->setColumnCount(6);
-        tableView->setHorizontalHeaderLabels({"ID", "ФИО", "Груп", "Курс", "Год", "Фото"});
+        tableView->setHorizontalHeaderLabels({"ID", "ФИО", "Группа", "Курс", "Год", "Фото"});
 
         for (int i = 0; i < array.size(); ++i) {
             QJsonObject obj = array[i].toObject();
             tableView->setItem(i, 0, new QTableWidgetItem(QString::number(obj["id"].toInt())));
             tableView->setItem(i, 1, new QTableWidgetItem(obj["ФИО"].toString()));
-            tableView->setItem(i, 2, new QTableWidgetItem(obj["Груп"].toString()));
+            tableView->setItem(i, 2, new QTableWidgetItem(obj["Группа"].toString()));
             tableView->setItem(i, 3, new QTableWidgetItem(QString::number(obj["Курс"].toInt())));
             tableView->setItem(i, 4, new QTableWidgetItem(QString::number(obj["Год"].toInt())));
 
@@ -165,29 +158,28 @@ private slots:
 
             QPixmap pixmap;
             if (!pixmap.loadFromData(byteArray)) {
-                qDebug() << "Failed to load image from data.";
-
-                pixmap = QPixmap(100, 200);
+                qDebug() << "Ошибка при загрузке фото";
+                pixmap = QPixmap(200, 400);
                 pixmap.fill(Qt::gray);
             }
 
             QPixmap scaledPixmap = pixmap.scaled(100, 200, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
 
-            auto *item = new QTableWidgetItem();
-            item->setIcon(QIcon(scaledPixmap));
+            QLabel *imageLabel = new QLabel();
+            imageLabel->setPixmap(scaledPixmap);
+            imageLabel->setScaledContents(true);
+            imageLabel->setAlignment(Qt::AlignCenter);
+            imageLabel->setFixedSize(scaledPixmap.size());
 
-
-            item->setSizeHint(QSize(100, 200));
-
-
-            tableView->setItem(i, 5, item);
+            tableView->setCellWidget(i, 5, imageLabel);
+            tableView->resizeRowsToContents();
+            tableView->resizeColumnsToContents();
         }
 
         tableView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
         reply->deleteLater();
     }
-
 
     void onAddReplyFinished() {
         QMessageBox::information(this, "Добавление", "Запись добавлена.");
@@ -201,7 +193,7 @@ private slots:
 
 private:
     void log(const QString& message) {
-        QFile file("/home/vova/CLionProjects/untitled/client/client.log");
+        QFile file(logFilePath);
         if (file.open(QIODevice::Append | QIODevice::Text)) {
             QTextStream out(&file);
             out << QDateTime::currentDateTime().toString() << ": " << message << "\n";
