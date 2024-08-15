@@ -19,7 +19,8 @@ include_directories(${OPENSSL_INCLUDE_DIR})
 include_directories(${nlohmann_json_INCLUDE_DIRS})
 include_directories(${PQXX_INCLUDE_DIRS})
 
-add_executable(server server.cpp ${SOURCE_FILES})
+add_executable(server server.cpp ${SOURCE_FILES}
+        ../httplib.h)
 
 target_link_libraries(server ${PostgreSQL_LIBRARIES})
 target_link_libraries(server ${OPENSSL_LIBRARIES})

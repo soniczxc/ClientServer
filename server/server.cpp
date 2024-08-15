@@ -1,9 +1,6 @@
 #include <iostream>
 #include <QCoreApplication>
 #include <QSettings>
-#include <QFile>
-#include <QTextStream>
-#include <QDateTime>
 #include "../httplib.h"
 #include <pqxx/pqxx>
 #include <QString>
@@ -17,7 +14,6 @@
 using namespace std;
 
 void logMessage(const QString& message) {
-    qDebug()<<QDir::currentPath();
     QFile file("../../server/server.log");
     if (file.open(QIODevice::Append | QIODevice::Text)) {
         QTextStream out(&file);
@@ -27,13 +23,6 @@ void logMessage(const QString& message) {
     }
 
 }
-void setUpDirectory() {
-    QString projectDir = QCoreApplication::applicationDirPath();
-    QString relativePath = "../../server/images";
-    QDir dir(projectDir);
-    QString fullPath = dir.absoluteFilePath(relativePath);
-}
-
 void handleAdd(const httplib::Request& req, httplib::Response& res, pqxx::connection& conn, QString& expectedUser, QString& expectedPassword) {
     try {
         QJsonDocument jsonDoc = QJsonDocument::fromJson(QString::fromStdString(req.body).toUtf8());
@@ -64,8 +53,7 @@ void handleAdd(const httplib::Request& req, httplib::Response& res, pqxx::connec
             }
 
             QByteArray byteArray = QByteArray::fromBase64(base64image.toLatin1());
-
-            QFile debugFileAfterDecoding(image_name);
+            QFile debugFileAfterDecoding("../../server/images/" + image_name);
             if (debugFileAfterDecoding.open(QIODevice::WriteOnly)) {
                 debugFileAfterDecoding.write(byteArray);
                 debugFileAfterDecoding.close();
@@ -101,10 +89,25 @@ void handleDelete(const httplib::Request& req, httplib::Response& res, pqxx::con
 
         if((user == expectedUser) && (hash == expectedPassword)) {
             pqxx::work txn(conn);
-            txn.exec0("DELETE FROM students WHERE id = " + txn.quote(id));
-            txn.commit();
-            res.set_content("Record deleted", "text/plain");
-            logMessage("Удалена запись ID: " + QString::number(id));
+            pqxx::result r = txn.exec("SELECT image FROM students WHERE id = " + txn.quote(id));
+            if (!r.empty()) {
+                QString image_name = QString::fromStdString(r[0][0].c_str());
+
+                QFile file("../../server/images/" + image_name);
+                if (file.exists()) {
+                    if (file.remove()) {
+                        logMessage("Удалено изображение: " + image_name);
+                    } else {
+                        logMessage("Не удалось удалить изображение: " + image_name);
+                    }
+                } else {
+                    logMessage("Изображение не найдено: " + image_name);
+                }
+                txn.exec0("DELETE FROM students WHERE id = " + txn.quote(id));
+                txn.commit();
+                res.set_content("Record deleted", "text/plain");
+                logMessage("Удалена запись ID: " + QString::number(id));
+            }
         }
     } catch (const std::exception& e) {
         res.status = 500;
@@ -115,7 +118,6 @@ void handleDelete(const httplib::Request& req, httplib::Response& res, pqxx::con
 
 void handleGet(const httplib::Request& req, httplib::Response& res, pqxx::connection& conn) {
     try {
-        setUpDirectory();
         pqxx::work txn(conn);
         pqxx::result r = txn.exec("SELECT * FROM students");
         txn.commit();
@@ -130,10 +132,10 @@ void handleGet(const httplib::Request& req, httplib::Response& res, pqxx::connec
             jsonObj["Год"] = row[4].as<int>();
 
             QString image_name = QString::fromStdString(row[5].c_str());
-
             QImage image("../../server/images/" + image_name);
             if (image.isNull()) {
                 qWarning("Ошибка при загрузке фото.");
+                logMessage("Фото не найдено.");
                 return;
             }
             QByteArray byteArray;
@@ -185,7 +187,9 @@ int main(int argc, char *argv[]) {
         });
 
         logMessage("Сервер запущен и слушает порт " + QString::number(port));
+        qDebug() << "Сервер запущен. Порт " + QString::number(port);
         svr.listen("0.0.0.0", port);
+
     } catch (const std::exception& e) {
         logMessage("Ошибка запуска сервера: " + QString::fromStdString(e.what()));
         return 1;

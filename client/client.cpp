@@ -60,6 +60,27 @@ public:
         layout->addWidget(deleteButton);
         layout->addWidget(tableView);
 
+        QHBoxLayout* filterLayout = new QHBoxLayout();
+        filterNameEdit = new QLineEdit();
+        filterGroupEdit = new QLineEdit();
+        filterCourseEdit = new QLineEdit();
+        filterYearEdit = new QLineEdit();
+
+        filterLayout->addWidget(new QLabel("Фильтр ФИО:"));
+        filterLayout->addWidget(filterNameEdit);
+        filterLayout->addWidget(new QLabel("Фильтр Группа:"));
+        filterLayout->addWidget(filterGroupEdit);
+        filterLayout->addWidget(new QLabel("Фильтр Курс:"));
+        filterLayout->addWidget(filterCourseEdit);
+        filterLayout->addWidget(new QLabel("Фильтр Год:"));
+        filterLayout->addWidget(filterYearEdit);
+
+        layout->addLayout(filterLayout);
+        connect(filterNameEdit, &QLineEdit::textChanged, this, &ClientApp::applyFilter);
+        connect(filterGroupEdit, &QLineEdit::textChanged, this, &ClientApp::applyFilter);
+        connect(filterCourseEdit, &QLineEdit::textChanged, this, &ClientApp::applyFilter);
+        connect(filterYearEdit, &QLineEdit::textChanged, this, &ClientApp::applyFilter);
+
         connect(addButton, &QPushButton::clicked, this, &ClientApp::addRecord);
         connect(deleteButton, &QPushButton::clicked, this, &ClientApp::deleteRecord);
         connect(manager, &QNetworkAccessManager::finished, this, &ClientApp::onReplyFinished);
@@ -69,11 +90,34 @@ public:
     }
 
 private slots:
+    void applyFilter() {
+        for (int i = 0; i < tableView->rowCount(); ++i) {
+            bool match = true;
+
+            if (!filterNameEdit->text().isEmpty() &&
+                !tableView->item(i, 1)->text().contains(filterNameEdit->text(), Qt::CaseInsensitive)) {
+                match = false;
+                }
+            if (!filterGroupEdit->text().isEmpty() &&
+                !tableView->item(i, 2)->text().contains(filterGroupEdit->text(), Qt::CaseInsensitive)) {
+                match = false;
+                }
+            if (!filterCourseEdit->text().isEmpty() &&
+                tableView->item(i, 3)->text().toInt() != filterCourseEdit->text().toInt()) {
+                match = false;
+                }
+            if (!filterYearEdit->text().isEmpty() &&
+                tableView->item(i, 4)->text().toInt() != filterYearEdit->text().toInt()) {
+                match = false;
+                }
+
+            tableView->setRowHidden(i, !match);
+        }
+    }
+
     void addRecord() {
         QString fileName = QFileDialog::getOpenFileName(this, "Выберите изображение");
         if (fileName.isEmpty()) return;
-
-        qDebug() << fileName;
         QImage image(fileName);
         if (image.isNull()) {
             qWarning("Ошибка при загрузке фото.");
@@ -128,7 +172,7 @@ private slots:
         QNetworkRequest request(QUrl(serverUrl + "/data"));
         QNetworkReply* reply = manager->get(request);
         connect(reply, &QNetworkReply::finished, this, &ClientApp::onReplyFinished);
-
+        applyFilter();
         log("Загружены данные из таблицы.");
     }
 
@@ -164,8 +208,6 @@ private slots:
             }
 
             QPixmap scaledPixmap = pixmap.scaled(100, 200, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-
-
             QLabel *imageLabel = new QLabel();
             imageLabel->setPixmap(scaledPixmap);
             imageLabel->setScaledContents(true);
@@ -210,6 +252,10 @@ private:
     QString logFilePath;
     QString username;
     QString password_hash;
+    QLineEdit* filterNameEdit;
+    QLineEdit* filterGroupEdit;
+    QLineEdit* filterCourseEdit;
+    QLineEdit* filterYearEdit;
 };
 
 int main(int argc, char *argv[]) {
